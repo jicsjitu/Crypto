@@ -5,7 +5,24 @@ import hmac
 import hashlib
 import json
 import time
-from keys import API_KEY, API_SECRET
+import streamlit as st
+
+# ==========================================
+# 🔐 SECRETS MANAGEMENT (Cloud + Local)
+# ==========================================
+# Yeh code automatically check karega ki keys kahan se leni hain
+try:
+    # Agar app Streamlit Cloud par hai, toh yahan se secure keys lega
+    API_KEY = st.secrets["API_KEY"]
+    API_SECRET = st.secrets["API_SECRET"]
+except Exception:
+    try:
+        # Agar tum laptop par run kar rahe ho, toh keys.py se lega
+        from keys import API_KEY, API_SECRET
+    except ImportError:
+        # Agar kahin bhi key nahi mili, toh crash nahi hoga
+        API_KEY = "DUMMY_KEY"
+        API_SECRET = "DUMMY_SECRET"
 
 # ==========================================
 # ⚙️ CONFIGURATION
@@ -16,7 +33,7 @@ USER_URL = "https://api.coindcx.com/exchange/v1/users/balances"
 
 PAIRS = {
     'B-BTC_INR': 'btcinr',
-    'B-ETH_INR': 'ethinr',  # ETH Yahan hai, ab dashboard pe bhi aayega
+    'B-ETH_INR': 'ethinr',  
     'B-BNB_INR': 'bnbinr',
     'B-SOL_INR': 'solinr',
     'B-XRP_INR': 'xrpinr',
@@ -56,7 +73,7 @@ PAIRS = {
 
 TIMEFRAME = '15m'
 
-# --- 1. LIVE PRICE FETCH (AGGRESSIVE MATCHING) ---
+# --- 1. LIVE PRICE FETCH ---
 def get_live_prices():
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
@@ -67,11 +84,9 @@ def get_live_prices():
         for item in data:
             if 'last_price' not in item: continue
             
-            raw_market = item['market'] # e.g. "BTC_INR" or "B-BTC_INR"
+            raw_market = item['market']
             price = float(item['last_price'])
             
-            # CLEAN NAME: Sab kuch hata ke plain text banao
-            # Example: "B-ETH_INR" -> "ETHINR"
             clean_market = raw_market.replace("_", "").replace("-", "")
             if clean_market.startswith("B") and len(clean_market) > 4:
                 clean_market = clean_market[1:] 
@@ -80,7 +95,6 @@ def get_live_prices():
             
         return price_map
     except Exception as e:
-        print(f"Ticker Error: {e}")
         return {}
 
 # --- 2. BALANCE ---
@@ -91,7 +105,7 @@ def generate_signature(json_body, secret_key):
 
 def get_wallet_balance():
     try:
-        if "PASTE" in API_KEY: return 0.0
+        if "DUMMY" in API_KEY: return 0.0
         json_body = {"timestamp": int(time.time() * 1000)}
         signature = generate_signature(json_body, API_SECRET)
         headers = {
@@ -108,7 +122,7 @@ def get_wallet_balance():
     except:
         return 0.0
 
-# --- 3. FETCH CANDLES (RELAXED RULES FOR ETH) ---
+# --- 3. FETCH CANDLES ---
 def fetch_candles(coindcx_pair):
     wazirx_pair = PAIRS.get(coindcx_pair)
     if not wazirx_pair: return None
@@ -117,7 +131,6 @@ def fetch_candles(coindcx_pair):
         params = {"symbol": wazirx_pair, "interval": TIMEFRAME, "limit": 100}
         headers = {"User-Agent": "Mozilla/5.0"}
         
-        # Timeout badha diya taaki ETH load ho sake
         response = requests.get(DATA_URL, params=params, headers=headers, timeout=10)
         data = response.json()
         
@@ -129,8 +142,6 @@ def fetch_candles(coindcx_pair):
         cols = ['open', 'high', 'low', 'close', 'volume']
         df[cols] = df[cols].astype(float)
         
-        # RULE RELAXED: Pehle 50 tha, ab 30 kiya.
-        # ETH kabhi kabhi kam candles deta hai, ab wo skip nahi hoga.
         if len(df) < 30: return None
         
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='s') + pd.Timedelta(hours=5, minutes=30)
@@ -197,10 +208,8 @@ def analyze_coin(df, pair_name, live_price):
     
     is_green_candle = curr['close'] > curr['open']
     
-# ... (upar ka EMA, RSI, ATR wala code same rahega) ...
-    
     # ==========================================
-    # 🧠 NEW RELAXED LOGIC FOR INR PAIRS
+    # 🧠 RELAXED LOGIC FOR INR PAIRS
     # ==========================================
     signal = "WAIT ⏳"
     reason = "No Setup"
@@ -215,37 +224,31 @@ def analyze_coin(df, pair_name, live_price):
     has_volume = vol > vol_avg
     if has_volume: score += 10
         
-    # STRATEGIES (Relaxed RSI and ADX)
-    # 1. Trend Strategy: RSI 45 se 75 ke beech, ADX 15 se upar
+    # STRATEGIES
     if price > ema and 45 < rsi < 75 and adx > 15 and is_green_candle and has_volume:
         score += 60
         signal = "BUY TREND 🚀"
         reason = f"Trend Starting (ADX {adx:.0f})"
         
-    # 2. Reversal Strategy: RSI 35 se niche (Dip Buying)
     elif rsi < 35 and is_green_candle: 
         score += 50
         signal = "BUY REVERSAL 🟢"
         reason = "Oversold Dip Buy"
         
-    # 3. Sell Strategy
     elif rsi > 80:
         score -= 20
         signal = "SELL 🔴"
         reason = "Overbought"
     
-    # 4. ADX Filter (Ab 20 ki jagah 15 kar diya hai)
     if adx < 15 and "BUY" in signal:
-        # Reversal trade mein ADX kam bhi ho toh chalega, isliye usko block mat karo
         if "REVERSAL" not in signal: 
             signal = "WAIT ⏳"
             reason = "Weak Trend"
             score = 20
         
-    # Risk Management (Thoda bada target)
     if "BUY" in signal:
-        stop_loss = price - (1.5 * atr) # SL thoda tight kiya
-        target = price + (3.5 * atr)    # Target lamba kiya
+        stop_loss = price - (1.5 * atr) 
+        target = price + (3.5 * atr)    
         
     return {
         "pair": pair_name.replace("B-", "").replace("_", "/"),
@@ -259,19 +262,16 @@ def analyze_coin(df, pair_name, live_price):
         "rsi": rsi,
         "adx": adx
     }
+
 def run_agent():
     balance = get_wallet_balance()
     live_prices = get_live_prices()
     results = []
     
     for coindcx_pair in PAIRS.keys():
-        # Clean Key: "B-ETH_INR" -> "ETHINR"
         my_clean_key = coindcx_pair.replace("B-", "").replace("_", "")
-        
-        # Price Match
         current_live_price = live_prices.get(my_clean_key, 0.0)
         
-        # Fetch Candles
         df = fetch_candles(coindcx_pair)
         
         if df is not None:
