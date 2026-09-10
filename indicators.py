@@ -22,9 +22,12 @@ def calculate_adx(df, period=14):
     dx = (abs(plus_di - minus_di) / (plus_di + minus_di)) * 100
     return dx.ewm(alpha=1/period, adjust=False).mean()
 
+# indicators.py (apply_all_indicators function ko replace karo)
+
 def apply_all_indicators(df):
-    # EMA 50
+    # EMA 50 & 200
     df['ema_50'] = df['close'].ewm(span=50, adjust=False).mean()
+    df['ema_200'] = df['close'].ewm(span=200, adjust=False).mean()
     
     # RSI
     delta = df['close'].diff()
@@ -43,23 +46,20 @@ def apply_all_indicators(df):
     df['tr'] = df[['tr1', 'tr2', 'tr3']].max(axis=1)
     df['atr'] = df['tr'].rolling(14).mean()
 
-    # ADX & Vol MA
-    df['adx'] = calculate_adx(df)
-    df['vol_ma'] = df['volume'].rolling(20).mean()
-
-    # 1. EMA 200 (Macro Trend)
-    df['ema_200'] = df['close'].ewm(span=200, adjust=False).mean()
-    
-    # 2. MACD
+    # MACD
     exp1 = df['close'].ewm(span=12, adjust=False).mean()
     exp2 = df['close'].ewm(span=26, adjust=False).mean()
     df['macd'] = exp1 - exp2
     df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
     
-    # 3. Bollinger Bands (20, 2)
+    # Bollinger Bands
     df['bb_middle'] = df['close'].rolling(window=20).mean()
     bb_std = df['close'].rolling(window=20).std()
     df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
     df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
+
+    # 🌊 WHALE TRACKER (Volume Spikes)
+    df['vol_ma'] = df['volume'].rolling(20).mean()
+    df['whale_spike'] = df['volume'] > (df['vol_ma'] * 3.0) # 300% zyada volume!
     
     return df
