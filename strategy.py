@@ -1,10 +1,9 @@
-# strategy.py (Puri file replace kardo)
 import time
 import config
 import api
 from indicators import apply_all_indicators
 
-def analyze_coin(df, pair_name, balance, btc_is_bullish):
+def analyze_coin(df, pair_name, balance, btc_is_bullish, sentiment_data=None):
     df = apply_all_indicators(df)
     
     curr = df.iloc[-1]
@@ -17,14 +16,14 @@ def analyze_coin(df, pair_name, balance, btc_is_bullish):
     atr = curr['atr'] if curr['atr'] > 0 else price * 0.01
     macd, macd_sig = curr['macd'], curr['macd_signal']
     bb_lower, bb_upper = curr['bb_lower'], curr['bb_upper']
-    whale_alert = curr['whale_spike'] # 🐋
+    whale_alert = curr['whale_spike']
     
     is_green_candle = price > curr['open'] 
     has_volume = (curr['volume'] > curr['vol_ma']) or (prev['volume'] > prev['vol_ma'])
     
     stop_loss = price - (2.0 * atr) 
     target = price + (4.0 * atr) 
-    trailing_sl = price - (1.2 * atr) # 📈 Dynamic TSL
+    trailing_sl = price - (1.2 * atr)
     
     trend_status = "BULLISH 🟢" if price > ema_200 else "BEARISH 🔴"
     signal, reason, score = "WAIT ⏳", f"Trend: {trend_status}", 0
@@ -49,22 +48,33 @@ def analyze_coin(df, pair_name, balance, btc_is_bullish):
         if "BUY" in signal: signal = "WAIT ⏳"
         else: signal, reason = "SELL 🔴", "Overbought / Peak"
 
-    # 👑 THE KING FILTER (BTC Trend Check)
+    # 👑 THE KING FILTER
     if "BUY" in signal and not btc_is_bullish:
-        # Trade cancel nahi hogi, bas warning milegi taaki tum quantity kam rakho
         reason += " ⚠️ (BTC BEARISH)"
         score -= 20 
 
     # 🐋 WHALE TRACKER
     if "BUY" in signal and whale_alert:
         reason = "🐋 WHALE ENTRY + " + reason
-        score += 30 # High Conviction Trade!
+        score += 30 
+
+    # 🧠 MARKET SENTIMENT (FEAR & GREED) OVERRIDE
+    # Toggle ON hoga tabhi yeh chaleaga
+    if sentiment_data and "BUY" in signal:
+        fng_val = sentiment_data["value"]
+        if fng_val <= 25 and "DIP" in signal:
+            score += 40
+            reason = f"🏆 GOLDEN BUY (Extreme Fear: {fng_val}) + " + reason
+        elif fng_val >= 75:
+            score -= 30
+            # Note: Signal BUY hi rahega tumhari request ke hisaab se, bas warning aayegi!
+            reason = f"⚠️ DUMP WARNING (Extreme Greed: {fng_val}) + " + reason
 
     risk = price - stop_loss
     qty, amt = 0, 0
     if "BUY" in signal and risk > 0 and balance > 0:
         risk_amt = balance * config.RISK_PER_TRADE
-        if not btc_is_bullish: risk_amt = risk_amt / 2 # BTC down hai toh risk aada (half) kar diya!
+        if not btc_is_bullish: risk_amt = risk_amt / 2 
         
         qty = risk_amt / risk
         amt = qty * price
@@ -75,27 +85,29 @@ def analyze_coin(df, pair_name, balance, btc_is_bullish):
         "pair": pair_name.replace("B-", "").replace("_", "/"),
         "price": price, "signal": signal, "score": score,
         "reason": reason, "target": target, "stop_loss": stop_loss,
-        "tsl": trailing_sl, # Naya feature added
+        "tsl": trailing_sl,
         "rsi": rsi, "qty": qty, "invest_amt": amt
     }
 
-def run_agent(current_balance, tf):
+def run_agent(current_balance, tf, use_sentiment=False):
     results = []
     
-    # 👑 THE KING FILTER (Pehle BTC ka Trend check karenge 4H par)
     btc_df = api.fetch_candles('B-BTC_INR', '4h')
     btc_is_bullish = True
     if btc_df is not None:
         btc_df = apply_all_indicators(btc_df)
         if btc_df.iloc[-1]['close'] < btc_df.iloc[-1]['ema_200']:
-            btc_is_bullish = False # BTC Crash mode me hai!
+            btc_is_bullish = False 
+
+    # Agar Toggle ON hai tabhi API call hogi
+    sentiment_data = api.get_fear_and_greed() if use_sentiment else None
 
     for coindcx_pair in config.PAIRS.keys():
         df = api.fetch_candles(coindcx_pair, tf)
         if df is not None:
-            analysis = analyze_coin(df, coindcx_pair, current_balance, btc_is_bullish)
+            analysis = analyze_coin(df, coindcx_pair, current_balance, btc_is_bullish, sentiment_data)
             if analysis: results.append(analysis)
         time.sleep(0.05) 
         
     results.sort(key=lambda x: x['score'], reverse=True)
-    return results, btc_is_bullish
+    return results, btc_is_bullish, sentiment_data
