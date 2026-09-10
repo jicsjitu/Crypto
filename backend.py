@@ -23,9 +23,8 @@ except Exception:
 # ==========================================
 # ⚙️ CONFIGURATION
 # ==========================================
-# WazirX hata diya. Ab Candles bhi CoinDCX se aayengi data match karne ke liye!
-CANDLE_URL = "https://public.coindcx.com/market_data/candles" 
-TICKER_URL = "https://api.coindcx.com/exchange/ticker"
+# Sirf Candle API use karenge, Live Ticker ki ab zaroorat nahi.
+CANDLE_URL = "https://public.coindcx.com/market_data/candles"
 USER_URL = "https://api.coindcx.com/exchange/v1/users/balances"
 
 PAIRS = {
@@ -46,30 +45,7 @@ PAIRS = {
 
 TIMEFRAME = '15m'
 
-# --- 1. LIVE PRICE FETCH ---
-def get_live_prices():
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(TICKER_URL, headers=headers, timeout=10)
-        data = response.json()
-        
-        price_map = {}
-        for item in data:
-            if 'last_price' not in item: continue
-            raw_market = item['market']
-            price = float(item['last_price'])
-            
-            clean_market = raw_market.replace("_", "").replace("-", "")
-            if clean_market.startswith("B") and len(clean_market) > 4:
-                clean_market = clean_market[1:] 
-            
-            price_map[clean_market] = price
-            
-        return price_map
-    except Exception as e:
-        return {}
-
-# --- 2. BALANCE ---
+# --- 1. BALANCE ---
 def generate_signature(json_body, secret_key):
     secret_bytes = bytes(secret_key, encoding='utf-8')
     body_bytes = bytes(json.dumps(json_body), encoding='utf-8')
@@ -94,10 +70,9 @@ def get_wallet_balance():
     except:
         return 0.0
 
-# --- 3. FETCH CANDLES (Ab WazirX ki jagah CoinDCX use hoga) ---
+# --- 2. FETCH CANDLES (Yeh ab price bhi return karega!) ---
 def fetch_candles(coindcx_pair):
     try:
-        # Pura data CoinDCX se aayega
         params = {"pair": coindcx_pair, "interval": TIMEFRAME, "limit": 100}
         headers = {"User-Agent": "Mozilla/5.0"}
         
@@ -109,7 +84,7 @@ def fetch_candles(coindcx_pair):
         df = pd.DataFrame(data)
         if len(df) < 30: return None
         
-        # Data ko seedha karna zaroori hai (Oldest to Newest)
+        # Data sort (Oldest to Newest)
         df.sort_values(by='time', ascending=True, inplace=True)
         df.reset_index(drop=True, inplace=True)
         
@@ -123,7 +98,7 @@ def fetch_candles(coindcx_pair):
 # --- CORRECTED ADX INDICATOR ---
 def calculate_adx(df, period=14):
     plus_dm = df['high'].diff()
-    minus_dm = df['low'].shift(1) - df['low'] # Sahi Formula for -DM
+    minus_dm = df['low'].shift(1) - df['low']
     
     pos_dm = np.where((plus_dm > minus_dm) & (plus_dm > 0), plus_dm, 0)
     neg_dm = np.where((minus_dm > plus_dm) & (minus_dm > 0), minus_dm, 0)
@@ -143,7 +118,7 @@ def calculate_adx(df, period=14):
     return adx
 
 # --- ANALYSIS ---
-def analyze_coin(df, pair_name, live_price):
+def analyze_coin(df, pair_name):
     if df is None or len(df) < 50: return None
     
     # EMA 50
@@ -171,15 +146,16 @@ def analyze_coin(df, pair_name, live_price):
     df['vol_ma'] = df['volume'].rolling(20).mean()
     
     curr = df.iloc[-1]
-    prev = df.iloc[-2] # Pichli candle check karne ke liye
+    prev = df.iloc[-2]
     
-    price = live_price if live_price > 0 else curr['close']
+    # Live Price directly Candle ki current close value se le rahe hain
+    price = curr['close']
+    
     ema = curr['ema_50']
     rsi = curr['rsi']
     atr = curr['atr'] if curr['atr'] > 0 else price * 0.01
     adx = curr['adx']
     
-    # Sahi green candle logic live price ke mutabik
     is_green_candle = price > curr['open'] 
     
     # ==========================================
@@ -193,7 +169,6 @@ def analyze_coin(df, pair_name, live_price):
         score += 10
         reason = "Uptrend"
     
-    # Volume Logic Relaxed (Current ya Pichli candle dono me se kisi ek me volume ho)
     has_volume = (curr['volume'] > curr['vol_ma']) or (prev['volume'] > prev['vol_ma'])
     if has_volume: score += 10
         
@@ -204,7 +179,7 @@ def analyze_coin(df, pair_name, live_price):
         signal = "BUY TREND 🚀"
         reason = f"Trend Starting (ADX {adx:.0f})"
         
-    # Reversal Dip Buy (RSI Thoda adjust kiya taaki zyada signals milein)
+    # Reversal Dip Buy
     elif rsi < 35 and is_green_candle: 
         score += 50
         signal = "BUY REVERSAL 🟢"
@@ -216,7 +191,6 @@ def analyze_coin(df, pair_name, live_price):
         signal = "SELL 🔴"
         reason = "Overbought"
     
-    # SL aur Target calculation
     stop_loss = price - (1.5 * atr) 
     target = price + (3.5 * atr)    
         
@@ -235,22 +209,19 @@ def analyze_coin(df, pair_name, live_price):
 
 def run_agent():
     balance = get_wallet_balance()
-    live_prices = get_live_prices()
     results = []
     
     for coindcx_pair in PAIRS.keys():
-        my_clean_key = coindcx_pair.replace("B-", "").replace("_", "")
-        current_live_price = live_prices.get(my_clean_key, 0.0)
-        
         df = fetch_candles(coindcx_pair)
         
         if df is not None:
-            analysis = analyze_coin(df, coindcx_pair, current_live_price)
+            # Ab hum live_price alag se pass nahi kar rahe hain. 
+            # Function seedha latest candle ka data as Live Price treat karega.
+            analysis = analyze_coin(df, coindcx_pair)
             if analysis:
                 results.append(analysis)
         
         time.sleep(0.05) 
         
-    # Sirf unhi coins ko upar dikhayega jinke signals aaye hain
     results.sort(key=lambda x: x['score'], reverse=True)
     return results, balance
