@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import time
 import api
@@ -6,60 +7,87 @@ from strategy import run_agent
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Pro Terminal", layout="wide", page_icon="🦅")
 
-# --- UI COLORS & STYLING ---
+# --- PRO STYLING (Binance / Premium Dark Theme) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #0E1117; }
+    /* Main Background & Cleanups */
+    .stApp { background-color: #0b0e11; color: #eaecef; }
+    .block-container { padding-top: 2rem; padding-bottom: 0rem; max-width: 95%; }
+    header { visibility: hidden; }
     
-    /* Clean Pro Colors for Rows */
-    .buy-row { background-color: #052e16; padding: 15px; border-radius: 8px; margin-bottom: 8px; border-left: 5px solid #22c55e; }
-    .sell-row { background-color: #450a0a; padding: 15px; border-radius: 8px; margin-bottom: 8px; border-left: 5px solid #ef4444; }
-    .wait-row { background-color: #1c1917; padding: 15px; border-radius: 8px; margin-bottom: 8px; border-left: 5px solid #57534e; }
+    /* Hide Streamlit default components spacing */
+    div[data-testid="stVerticalBlock"] { gap: 0rem; }
+
+    /* Custom Row Cards */
+    .trade-card { 
+        padding: 16px 20px; 
+        border-radius: 8px; 
+        margin-bottom: 12px; 
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
     
-    .big-font { font-size: 18px; font-weight: bold; font-family: monospace; }
+    /* Card Variants */
+    .card-buy { background: linear-gradient(90deg, #064e3b 0%, #022c22 100%); border-left: 6px solid #10b981; }
+    .card-sell { background: linear-gradient(90deg, #7f1d1d 0%, #450a0a 100%); border-left: 6px solid #ef4444; }
+    .card-wait { background: #1e2329; border-left: 6px solid #474d57; }
     
-    /* Faltu margin aur header hata diya */
-    .block-container { padding-top: 1.5rem; padding-bottom: 0rem; }
-    header {visibility: hidden;}
+    /* Typography */
+    .col-title { font-size: 12px; color: #848e9c; text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
+    .col-val { font-size: 16px; font-weight: bold; }
+    .pair-name { font-size: 18px; font-weight: 900; color: #fcd535; }
     
-    /* Radio buttons spacing */
-    div.row-widget.stRadio > div{ flex-direction:row; }
+    /* Specific Colors */
+    .text-green { color: #10b981; }
+    .text-red { color: #ef4444; }
+    .text-gray { color: #b7bdc6; }
+    
+    /* Sub-row for Trade Plan */
+    .trade-plan-row { 
+        margin-top: 12px; 
+        padding-top: 12px; 
+        border-top: 1px solid rgba(255,255,255,0.1); 
+        display: flex; 
+        justify-content: space-between;
+        font-size: 14px;
+    }
+    .plan-box { background: rgba(0,0,0,0.2); padding: 6px 12px; border-radius: 4px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- CACHE LOGIC (For Instant Filtering) ---
-# Yeh line ensure karegi ki filter change karne par wapas API call na ho!
+# --- CACHE LOGIC (Instant Filtering) ---
 @st.cache_data(ttl=180, show_spinner=False)
 def get_market_data(tf, balance):
     return run_agent(balance, tf)
 
-# --- TOP BAR (No Sidebar, Everything on Top) ---
-c1, c2, c3, c4 = st.columns([1.5, 2.5, 1.5, 1.5])
+# --- TOP CONTROL BAR (Ultra Clean) ---
+# Vertical alignment available in Streamlit 1.35+, but we use standard columns safely
+col1, col2, col3, col4, col5 = st.columns([1.5, 1.5, 2, 1.5, 1.5])
 
-with c1:
+with col1:
     selected_tf = st.selectbox("⏱️ Timeframe", ["15m", "1h", "4h"], index=1)
-
-with c2:
-    # Instant Filter!
-    filter_opt = st.radio("🔍 Filter Data", ["All", "BUY", "SELL"], horizontal=True)
-
-with c3:
-    st.write("") # Button align karne ke liye space
+with col2:
+    filter_opt = st.selectbox("🔍 Filter Signal", ["All", "BUY", "SELL"])
+with col3:
+    st.write("") # Spacer
+with col4:
+    st.write("")
     auto_refresh = st.checkbox("🔄 Auto-Refresh (3 Min)", value=True)
-
-with c4:
-    st.write("") # Button align karne ke liye space
-    if st.button("⚡ Manual Refresh"):
-        get_market_data.clear() # Cache clear hoga aur fresh scan chalega
+with col5:
+    st.write("")
+    if st.button("⚡ Scan Market", use_container_width=True):
+        get_market_data.clear()
         st.rerun()
 
-st.markdown("---")
+st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
 # --- FETCH DATA ---
 real_balance = api.get_wallet_balance()
-data = get_market_data(selected_tf, real_balance)
+# Fallback for UI if real balance is 0 (so QTY and Invest don't show 0)
+display_balance = real_balance if real_balance > 0 else 50000.0 
+data = get_market_data(selected_tf, display_balance)
 
-# --- APPLY FILTER (Instantly) ---
+# --- FILTER DATA ---
 filtered_data = []
 if data:
     for item in data:
@@ -67,65 +95,78 @@ if data:
         if filter_opt == "SELL" and "SELL" not in item['signal']: continue
         filtered_data.append(item)
 
-# --- MAIN TABLE ---
+# --- RENDER MAIN TABLE ---
 if not filtered_data:
-    st.warning(f"⚠️ Is timeframe par abhi koi '{filter_opt}' setup nahi mila. Thodi der baad check karein.")
+    st.info(f"⚠️ No '{filter_opt}' setups found on {selected_tf} timeframe right now.")
 else:
-    # Table Headers
-    hc1, hc2, hc3, hc4, hc5, hc6 = st.columns([1, 1.5, 1, 1, 1, 2.5])
-    hc1.write("🪙 PAIR")
-    hc2.write("💰 PRICE")
-    hc3.write("📈 SIGNAL")
-    hc4.write("📊 RSI")
-    hc5.write("🏆 SCORE")
-    hc6.write("🤖 ANALYSIS")
-    st.markdown("---")
-
-    # Data Rows
     for item in filtered_data:
-        # Strict Colors apply kiye hain
+        # Determine colors and classes
         if "BUY" in item['signal']: 
-            row_class, icon, sig_color = "buy-row", "🚀", "#4ade80" # Bright Green
+            card_class, icon, sig_color = "card-buy", "🚀", "text-green"
         elif "SELL" in item['signal']: 
-            row_class, icon, sig_color = "sell-row", "🔻", "#f87171" # Bright Red
+            card_class, icon, sig_color = "card-sell", "🔻", "text-red"
         else: 
-            row_class, icon, sig_color = "wait-row", "⏳", "#a8a29e" # Grey
+            card_class, icon, sig_color = "card-wait", "⏳", "text-gray"
 
+        # Price Formatting
         p_fmt = f"₹{item['price']:.6f}" if item['price'] < 50 else f"₹{item['price']:,.2f}"
         
-        with st.container():
-            st.markdown(f"""
-            <div class="{row_class}">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="width: 15%; font-weight: bold;">{item['pair']}</div>
-                    <div style="width: 20%;" class="big-font">{p_fmt}</div>
-                    <div style="width: 15%; font-weight: bold; color: {sig_color};">{icon} {item['signal'].split(' ')[0]}</div>
-                    <div style="width: 10%;">{item['rsi']:.1f}</div>
-                    <div style="width: 10%; font-weight: bold;">{item['score']}</div>
-                    <div style="width: 30%; font-size: 13px; color: #e5e5e5;">{item['reason']}</div>
+        # HTML Layout Construction
+        html_content = f"""
+        <div class="trade-card {card_class}">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="width: 15%;">
+                    <div class="col-title">Pair</div>
+                    <div class="pair-name">{item['pair']}</div>
+                </div>
+                <div style="width: 20%;">
+                    <div class="col-title">Live Price</div>
+                    <div class="col-val">{p_fmt}</div>
+                </div>
+                <div style="width: 15%;">
+                    <div class="col-title">Signal</div>
+                    <div class="col-val {sig_color}">{icon} {item['signal']}</div>
+                </div>
+                <div style="width: 10%;">
+                    <div class="col-title">RSI</div>
+                    <div class="col-val">{item['rsi']:.1f}</div>
+                </div>
+                <div style="width: 10%;">
+                    <div class="col-title">Score</div>
+                    <div class="col-val">{item['score']}</div>
+                </div>
+                <div style="width: 30%;">
+                    <div class="col-title">Analysis Reason</div>
+                    <div class="col-val" style="font-size: 14px; font-weight: normal;">{item['reason']}</div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+        """
 
-            # Trade Plan sirf BUY wale setup pe dikhega
-            if "BUY" in item['signal'] and item.get('qty', 0) > 0:
-                t_fmt = f"₹{item['target']:.6f}" if item['target'] < 50 else f"₹{item['target']:,.2f}"
-                s_fmt = f"₹{item['stop_loss']:.6f}" if item['stop_loss'] < 50 else f"₹{item['stop_loss']:,.2f}"
-                
-                tc1, tc2, tc3, tc4 = st.columns([1, 1, 1, 1])
-                tc1.success(f"Target: {t_fmt}")
-                tc2.error(f"SL: {s_fmt}")
-                tc3.info(f"Qty: {item['qty']:.4f}")
-                tc4.warning(f"Invest: ₹{item.get('invest_amt', 0):,.0f}")
-                st.markdown("---")
+        # Append Trade Plan if BUY
+        if "BUY" in item['signal'] and item.get('qty', 0) > 0:
+            t_fmt = f"₹{item['target']:.6f}" if item['target'] < 50 else f"₹{item['target']:,.2f}"
+            s_fmt = f"₹{item['stop_loss']:.6f}" if item['stop_loss'] < 50 else f"₹{item['stop_loss']:,.2f}"
+            
+            html_content += f"""
+            <div class="trade-plan-row">
+                <div class="plan-box"><span class="col-title">Target:</span> <span class="text-green" style="font-weight:bold;">{t_fmt}</span></div>
+                <div class="plan-box"><span class="col-title">Stop-Loss:</span> <span class="text-red" style="font-weight:bold;">{s_fmt}</span></div>
+                <div class="plan-box"><span class="col-title">Qty:</span> <span class="col-val">{item['qty']:.4f}</span></div>
+                <div class="plan-box"><span class="col-title">Capital Req:</span> <span class="col-val text-gray">₹{item.get('invest_amt', 0):,.0f}</span></div>
+            </div>
+            """
+            
+        html_content += "</div>"
+        
+        # Render the full card
+        st.markdown(html_content, unsafe_allow_html=True)
 
-# --- SILENT AUTO REFRESH ---
+# --- SILENT REFRESH ---
 if auto_refresh:
     progress_bar = st.progress(0)
     for i in range(100):
-        time.sleep(1.8) # 3 Minutes
+        time.sleep(1.8) # 3 Mins Total
         progress_bar.progress(i + 1)
     
-    # Refresh se pehle cache clear karo taaki naya data aaye
     get_market_data.clear()
     st.rerun()
