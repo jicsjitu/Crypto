@@ -15,15 +15,12 @@ st.markdown("""
     .block-container { padding-top: 2rem; padding-bottom: 0rem; max-width: 95%; }
     header { visibility: hidden; }
     
-    /* Yahan se gap hataya taaki cards ke beech space aaye */
-
     /* Custom Row Cards */
     .trade-card { 
-        background-color: #181a20; /* Uniform Dark Background for all cards */
+        background-color: #181a20; 
         padding: 20px; 
         border-radius: 8px; 
-        margin-bottom: 5px; 
-        border: 1px solid #2b3139; /* Subtle border */
+        border: 1px solid #2b3139; 
         box-shadow: 0 4px 8px rgba(0,0,0,0.4);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
@@ -47,7 +44,7 @@ st.markdown("""
     .trade-plan-row { 
         margin-top: 16px; 
         padding-top: 16px; 
-        border-top: 1px dashed #2b3139; /* Dashed line separator */
+        border-top: 1px dashed #2b3139; 
         display: flex; 
         justify-content: space-between;
         align-items: center;
@@ -120,6 +117,9 @@ else:
             html_content += f"<div class='trade-plan-row'><div class='plan-box'><span class='col-title'>TARGET:</span> <span class='col-val text-green'>{t_fmt}</span></div><div class='plan-box'><span class='col-title'>STOP-LOSS:</span> <span class='col-val text-red'>{s_fmt}</span></div><div class='plan-box'><span class='col-title'>QTY:</span> <span class='col-val'>{item['qty']:.4f}</span></div><div class='plan-box'><span class='col-title'>CAPITAL REQ:</span> <span class='col-val'>{invest_fmt}</span></div></div>"
             
         html_content += "</div>"
+        
+        # JABARDASTI GAP DALNE KE LIYE YEH NAYI LINE ADD KI HAI
+        html_content += "<div style='height: 15px;'></div>"
         
         st.markdown(html_content, unsafe_allow_html=True)
 
