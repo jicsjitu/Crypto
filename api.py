@@ -40,9 +40,9 @@ def get_wallet_balance():
     except:
         return 0.0
 
-def fetch_candles(coindcx_pair):
+def fetch_candles(coindcx_pair, tf='15m'):  # <-- tf add kiya
     try:
-        params = {"pair": coindcx_pair, "interval": config.TIMEFRAME, "limit": 100}
+        params = {"pair": coindcx_pair, "interval": tf, "limit": 100} # config.TIMEFRAME hataya
         headers = {"User-Agent": "Mozilla/5.0"}
         
         response = requests.get(config.CANDLE_URL, params=params, headers=headers, timeout=10)
@@ -51,7 +51,7 @@ def fetch_candles(coindcx_pair):
         if not data or not isinstance(data, list): return None
         
         df = pd.DataFrame(data)
-        if len(df) < 50: return None # Minimum data for EMA50
+        if len(df) < 50: return None
         
         df.sort_values(by='time', ascending=True, inplace=True)
         df.reset_index(drop=True, inplace=True)
