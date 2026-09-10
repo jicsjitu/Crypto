@@ -46,5 +46,20 @@ def apply_all_indicators(df):
     # ADX & Vol MA
     df['adx'] = calculate_adx(df)
     df['vol_ma'] = df['volume'].rolling(20).mean()
+
+    # 1. EMA 200 (Macro Trend)
+    df['ema_200'] = df['close'].ewm(span=200, adjust=False).mean()
+    
+    # 2. MACD
+    exp1 = df['close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['close'].ewm(span=26, adjust=False).mean()
+    df['macd'] = exp1 - exp2
+    df['macd_signal'] = df['macd'].ewm(span=9, adjust=False).mean()
+    
+    # 3. Bollinger Bands (20, 2)
+    df['bb_middle'] = df['close'].rolling(window=20).mean()
+    bb_std = df['close'].rolling(window=20).std()
+    df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
+    df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
     
     return df
