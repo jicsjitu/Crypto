@@ -91,6 +91,6 @@ if auto_refresh:
     st.write("⏳ Next Refresh in:")
     progress_bar = st.progress(0)
     for i in range(100):
-        time.sleep(0.6) 
+        time.sleep(1.8) 
         progress_bar.progress(i + 1)
     st.rerun()
