@@ -1,4 +1,4 @@
-# dashboard.py (ya app.py)
+# app.py
 import streamlit as st
 import time
 import api
@@ -30,7 +30,6 @@ st.markdown("""
 
 @st.cache_data(ttl=180, show_spinner=False)
 def get_market_data(tf, balance, use_sent):
-    # Pass all 3 variables safely
     return run_agent(balance, tf, use_sent)
 
 # --- TOP CONTROL BAR ---
@@ -56,14 +55,12 @@ st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
 real_balance = api.get_wallet_balance()
 display_balance = real_balance if real_balance > 1000 else 50000.0  
 
-# Safely fetch data
 try:
     result_data = get_market_data(selected_tf, display_balance, use_sentiment)
 except TypeError:
-    # Fallback if strategy.py run_agent only accepts 2 arguments
     result_data = run_agent(display_balance, selected_tf)
 
-# --- BULLETPROOF UNPACKING LOGIC (Crash Fix) ---
+# --- BULLETPROOF UNPACKING ---
 sentiment_data = None
 btc_bullish = True
 data = []
@@ -78,38 +75,34 @@ if isinstance(result_data, tuple):
 else:
     data = result_data
 
-# --- TOP BANNERS (BTC & Sentiment) ---
-btc_status = "BULLISH 🟢 (Safe to Trade)" if btc_bullish else "BEARISH 🔴 (Risk is High - Half Quantities)"
-btc_color = "#0ecb81" if btc_bullish else "#f6465d"
+# --- TOP BANNERS (Using Safe Native Columns instead of Buggy HTML) ---
+b_col1, b_col2 = st.columns(2)
 
-banner_html = f"""
-<div style="display: flex; gap: 15px; margin-bottom: 20px;">
-    <div style="flex: 1; background-color: #181a20; padding: 12px 20px; border-radius: 8px; border-left: 4px solid {btc_color}; border: 1px solid #2b3139;">
-        <b style='color:#848e9c; font-size:12px; letter-spacing:1px; font-family: sans-serif;'>👑 GLOBAL BTC (4H) TREND:</b><br/>
-        <span style='color: {btc_color}; font-weight:bold; font-size:16px; font-family: sans-serif;'>{btc_status}</span>
+with b_col1:
+    btc_status = "BULLISH 🟢 (Safe to Trade)" if btc_bullish else "BEARISH 🔴 (Risk is High - Half Quantities)"
+    btc_color = "#0ecb81" if btc_bullish else "#f6465d"
+    st.markdown(f"""
+    <div style='background-color: #181a20; padding: 14px 20px; border-radius: 8px; border-left: 4px solid {btc_color}; border: 1px solid #2b3139;'>
+        <div style='color:#848e9c; font-size:11px; text-transform:uppercase; font-weight:600; margin-bottom:4px;'>👑 Global BTC (4H) Trend</div>
+        <div style='color: {btc_color}; font-size:16px; font-weight:bold;'>{btc_status}</div>
     </div>
-"""
+    """, unsafe_allow_html=True)
 
 if use_sentiment and sentiment_data:
-    fng_val = sentiment_data['value']
-    fng_class = sentiment_data['class']
-    
-    if fng_val <= 25: sent_color = "#0ecb81" 
-    elif fng_val >= 75: sent_color = "#f6465d" 
-    else: sent_color = "#fcd535" 
+    with b_col2:
+        fng_val = sentiment_data['value']
+        fng_class = sentiment_data['class']
+        sent_color = "#0ecb81" if fng_val <= 25 else ("#f6465d" if fng_val >= 75 else "#fcd535")
+        st.markdown(f"""
+        <div style='background-color: #181a20; padding: 14px 20px; border-radius: 8px; border-left: 4px solid {sent_color}; border: 1px solid #2b3139;'>
+            <div style='color:#848e9c; font-size:11px; text-transform:uppercase; font-weight:600; margin-bottom:4px;'>🧠 Market Sentiment (Fear & Greed)</div>
+            <div style='color: {sent_color}; font-size:16px; font-weight:bold;'>Score: {fng_val}/100 ({fng_class})</div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    banner_html += f"""
-    <div style="flex: 1; background-color: #181a20; padding: 12px 20px; border-radius: 8px; border-left: 4px solid {sent_color}; border: 1px solid #2b3139;">
-        <b style='color:#848e9c; font-size:12px; letter-spacing:1px; font-family: sans-serif;'>🧠 MARKET SENTIMENT:</b><br/>
-        <span style='color: {sent_color}; font-weight:bold; font-size:16px; font-family: sans-serif;'>Score: {fng_val}/100 ({fng_class})</span>
-    </div>
-    """
-
-banner_html += "</div>"
-st.markdown(banner_html, unsafe_allow_html=True)
+st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
 
 # --- FILTER & RENDER DATA ---
-# Extra check to ensure data is a list of dictionaries
 if not isinstance(data, list):
     data = []
 
