@@ -52,5 +52,8 @@ PAIRS = {
     'B-FLOKI_INR': 'flokiinr', 
     'B-JUP_INR': 'jupinr', 
     'B-MEME_INR': 'memeinr',
-    'B-GALA_INR': 'galainr'
+    'B-GALA_INR': 'galainr',
+    'B-IMX_INR': 'iminr',
+    'B-ENA_INR': 'enainr', 
+    'B-BCH_INR': 'bchinr'
 }
