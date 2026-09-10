@@ -3,7 +3,7 @@
 CANDLE_URL = "https://public.coindcx.com/market_data/candles"
 USER_URL = "https://api.coindcx.com/exchange/v1/users/balances"
 
-TIMEFRAME = '15m'
+TIMEFRAME = '1h'
 RISK_PER_TRADE = 0.02  # 2% Risk
 
 PAIRS = {
