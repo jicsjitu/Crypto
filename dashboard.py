@@ -50,8 +50,11 @@ st.markdown("""
         display: flex; 
         justify-content: space-between;
         font-size: 14px;
+        background-color: rgba(0,0,0,0.15);
+        border-radius: 6px;
+        padding: 10px 15px;
     }
-    .plan-box { background: rgba(0,0,0,0.2); padding: 6px 12px; border-radius: 4px; }
+    .plan-box { display: flex; gap: 8px; align-items: center; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -61,7 +64,6 @@ def get_market_data(tf, balance):
     return run_agent(balance, tf)
 
 # --- TOP CONTROL BAR (Ultra Clean) ---
-# Vertical alignment available in Streamlit 1.35+, but we use standard columns safely
 col1, col2, col3, col4, col5 = st.columns([1.5, 1.5, 2, 1.5, 1.5])
 
 with col1:
@@ -83,7 +85,6 @@ st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
 # --- FETCH DATA ---
 real_balance = api.get_wallet_balance()
-# Fallback for UI if real balance is 0 (so QTY and Invest don't show 0)
 display_balance = real_balance if real_balance > 0 else 50000.0 
 data = get_market_data(selected_tf, display_balance)
 
@@ -100,7 +101,6 @@ if not filtered_data:
     st.info(f"⚠️ No '{filter_opt}' setups found on {selected_tf} timeframe right now.")
 else:
     for item in filtered_data:
-        # Determine colors and classes
         if "BUY" in item['signal']: 
             card_class, icon, sig_color = "card-buy", "🚀", "text-green"
         elif "SELL" in item['signal']: 
@@ -108,57 +108,20 @@ else:
         else: 
             card_class, icon, sig_color = "card-wait", "⏳", "text-gray"
 
-        # Price Formatting
         p_fmt = f"₹{item['price']:.6f}" if item['price'] < 50 else f"₹{item['price']:,.2f}"
         
-        # HTML Layout Construction
-        html_content = f"""
-        <div class="trade-card {card_class}">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="width: 15%;">
-                    <div class="col-title">Pair</div>
-                    <div class="pair-name">{item['pair']}</div>
-                </div>
-                <div style="width: 20%;">
-                    <div class="col-title">Live Price</div>
-                    <div class="col-val">{p_fmt}</div>
-                </div>
-                <div style="width: 15%;">
-                    <div class="col-title">Signal</div>
-                    <div class="col-val {sig_color}">{icon} {item['signal']}</div>
-                </div>
-                <div style="width: 10%;">
-                    <div class="col-title">RSI</div>
-                    <div class="col-val">{item['rsi']:.1f}</div>
-                </div>
-                <div style="width: 10%;">
-                    <div class="col-title">Score</div>
-                    <div class="col-val">{item['score']}</div>
-                </div>
-                <div style="width: 30%;">
-                    <div class="col-title">Analysis Reason</div>
-                    <div class="col-val" style="font-size: 14px; font-weight: normal;">{item['reason']}</div>
-                </div>
-            </div>
-        """
+        # FIX: Single line HTML construction to prevent Markdown Code Block bug
+        html_content = f"<div class='trade-card {card_class}'><div style='display: flex; justify-content: space-between; align-items: center;'><div style='width: 15%;'><div class='col-title'>Pair</div><div class='pair-name'>{item['pair']}</div></div><div style='width: 20%;'><div class='col-title'>Live Price</div><div class='col-val'>{p_fmt}</div></div><div style='width: 15%;'><div class='col-title'>Signal</div><div class='col-val {sig_color}'>{icon} {item['signal']}</div></div><div style='width: 10%;'><div class='col-title'>RSI</div><div class='col-val'>{item['rsi']:.1f}</div></div><div style='width: 10%;'><div class='col-title'>Score</div><div class='col-val'>{item['score']}</div></div><div style='width: 30%;'><div class='col-title'>Analysis Reason</div><div class='col-val' style='font-size: 14px; font-weight: normal;'>{item['reason']}</div></div></div>"
 
         # Append Trade Plan if BUY
         if "BUY" in item['signal'] and item.get('qty', 0) > 0:
             t_fmt = f"₹{item['target']:.6f}" if item['target'] < 50 else f"₹{item['target']:,.2f}"
             s_fmt = f"₹{item['stop_loss']:.6f}" if item['stop_loss'] < 50 else f"₹{item['stop_loss']:,.2f}"
             
-            html_content += f"""
-            <div class="trade-plan-row">
-                <div class="plan-box"><span class="col-title">Target:</span> <span class="text-green" style="font-weight:bold;">{t_fmt}</span></div>
-                <div class="plan-box"><span class="col-title">Stop-Loss:</span> <span class="text-red" style="font-weight:bold;">{s_fmt}</span></div>
-                <div class="plan-box"><span class="col-title">Qty:</span> <span class="col-val">{item['qty']:.4f}</span></div>
-                <div class="plan-box"><span class="col-title">Capital Req:</span> <span class="col-val text-gray">₹{item.get('invest_amt', 0):,.0f}</span></div>
-            </div>
-            """
+            html_content += f"<div class='trade-plan-row'><div class='plan-box'><span class='col-title'>Target:</span> <span class='text-green' style='font-weight:bold;'>{t_fmt}</span></div><div class='plan-box'><span class='col-title'>Stop-Loss:</span> <span class='text-red' style='font-weight:bold;'>{s_fmt}</span></div><div class='plan-box'><span class='col-title'>Qty:</span> <span class='col-val'>{item['qty']:.4f}</span></div><div class='plan-box'><span class='col-title'>Capital Req:</span> <span class='col-val text-gray'>₹{item.get('invest_amt', 0):,.0f}</span></div></div>"
             
         html_content += "</div>"
         
-        # Render the full card
         st.markdown(html_content, unsafe_allow_html=True)
 
 # --- SILENT REFRESH ---
