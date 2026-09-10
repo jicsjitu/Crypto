@@ -11,37 +11,60 @@ def analyze_coin(df, pair_name, balance):
     prev = df.iloc[-2]
     
     price = curr['close']
-    ema = curr['ema_50']
+    ema_50 = curr['ema_50']
+    ema_200 = curr['ema_200']
     rsi = curr['rsi']
     atr = curr['atr'] if curr['atr'] > 0 else price * 0.01
     adx = curr['adx']
+    macd = curr['macd']
+    macd_sig = curr['macd_signal']
+    bb_lower = curr['bb_lower']
+    bb_upper = curr['bb_upper']
     
     is_green_candle = price > curr['open'] 
+    has_volume = (curr['volume'] > curr['vol_ma']) or (prev['volume'] > prev['vol_ma'])
     
     signal, reason, score = "WAIT ⏳", "No Setup", 0
     
-    if price > ema:
-        score += 10
-        reason = "Uptrend"
-    
-    has_volume = (curr['volume'] > curr['vol_ma']) or (prev['volume'] > prev['vol_ma'])
-    if has_volume: score += 10
+    # 🛑 1. MACRO TREND FILTER (EMA 200)
+    if price < ema_200:
+        reason = "Below EMA200 (Bearish)"
+        # Hum short nahi kar rahe, toh isko sidha wait mein dalenge.
+    else:
+        score += 20  # Overall trend is UP
         
-    # LOGIC
-    if price > ema and 45 < rsi < 75 and adx > 18 and is_green_candle and has_volume:
-        score += 60
-        signal, reason = "BUY TREND 🚀", f"Trend Starting (ADX {adx:.0f})"
-    elif rsi < 35 and is_green_candle: 
-        score += 50
-        signal, reason = "BUY REVERSAL 🟢", "Oversold Dip Buy"
-    elif rsi > 80:
-        score -= 20
-        signal, reason = "SELL 🔴", "Overbought"
+        if price > ema_50:
+            score += 10
+            
+        if has_volume: 
+            score += 10
+
+        # 🚀 STRATEGY 1: PRO TREND RIDER (High Probability)
+        # Price > EMA50/200, MACD Bullish Crossover, ADX > 20, Good RSI
+        if price > ema_50 and macd > macd_sig and 50 < rsi < 70 and adx > 20 and is_green_candle and has_volume:
+            score += 50
+            signal, reason = "BUY TREND 🚀", f"MACD Bullish + Trend Up"
+            
+        # 🟢 STRATEGY 2: BOLLINGER BAND SNIPER (Dip Buy)
+        # Price dropped to BB Lower Band but macro trend is UP (Price > EMA200)
+        elif (curr['low'] <= bb_lower or prev['low'] <= bb_lower) and is_green_candle and rsi < 40:
+            score += 45
+            signal, reason = "BUY REVERSAL 🟢", "BB Lower Band Bounce"
+
+    # 🔴 STRATEGY 3: TAKE PROFIT / SELL WARNING
+    # If RSI > 80 or price touches upper Bollinger Band
+    if rsi > 80 or curr['high'] >= bb_upper:
+        score -= 30
+        if "BUY" in signal:
+            signal = "WAIT ⏳" # Cancel buy if overbought
+        else:
+            signal, reason = "SELL 🔴", "Overbought / BB Upper"
     
+    # RISK MANAGEMENT (ATR Based)
     stop_loss = price - (1.5 * atr) 
-    target = price + (3.5 * atr)    
+    target = price + (3.0 * atr)  # 1:2 Risk Reward ratio
     
-    # Position Sizing Logic (Moved from UI)
+    # Position Sizing
     risk = price - stop_loss
     qty, amt = 0, 0
     if "BUY" in signal and risk > 0 and balance > 0:
@@ -58,7 +81,6 @@ def analyze_coin(df, pair_name, balance):
         "reason": reason, "target": target, "stop_loss": stop_loss,
         "rsi": rsi, "qty": qty, "invest_amt": amt
     }
-
 def run_agent(current_balance):
     results = []
     for coindcx_pair in config.PAIRS.keys():
