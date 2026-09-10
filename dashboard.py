@@ -81,7 +81,7 @@ st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
 
 # --- FETCH DATA ---
 real_balance = api.get_wallet_balance()
-display_balance = real_balance if real_balance > 0 else 50000.0 
+display_balance = real_balance if real_balance > 1000 else 50000.0 
 
 # Data unpack: Ab strategy.py results aur btc_is_bullish dono return karta hai
 result_data = get_market_data(selected_tf, display_balance)
