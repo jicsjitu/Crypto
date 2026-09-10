@@ -62,3 +62,13 @@ def fetch_candles(coindcx_pair, tf='15m'):  # <-- tf add kiya
         return df
     except:
         return None
+def get_fear_and_greed():
+    try:
+        response = requests.get("https://api.alternative.me/fng/?limit=1", timeout=5)
+        data = response.json()
+        if data and "data" in data and len(data["data"]) > 0:
+            val = int(data["data"][0]["value"])
+            classification = data["data"][0]["value_classification"]
+            return {"value": val, "class": classification}
+    except:
+        return None
